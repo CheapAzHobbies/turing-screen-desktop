@@ -41,7 +41,7 @@ jobs:
           touch fake-app/main.py fake-app/configure.py fake-app/theme-editor.py
           echo "config:" > fake-app/config.yaml
           echo "  THEME: DemoTheme" >> fake-app/config.yaml
-          : > fake-app/requirements.txt
+          printf 'pyserial\nPyYAML\nPillow\npsutil\n' > fake-app/requirements.txt
 
       - name: Run installer
         run: ./install.sh --app-dir "$PWD/fake-app" -y
