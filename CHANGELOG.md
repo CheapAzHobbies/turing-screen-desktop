@@ -3,6 +3,15 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-09-07
+
+### Fixed
+- AppImage build resolves the bundled CPython from the python-appimage release
+  API instead of a hardcoded patch version that 404d.
+- The AppImage now has a version-free filename, so
+  `/releases/latest/download/Turing_Smart_Screen-x86_64.AppImage` is a stable
+  link that never needs updating.
+
 ## [1.1.0] - 2026-09-07
 
 ### Added

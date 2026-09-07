@@ -30,7 +30,7 @@ One file, no Python, no virtualenv, no cloning. Download it, make it executable,
 run it. Works on any distro with FUSE.
 
 ```bash
-curl -fsSLO https://github.com/CheapAzHobbies/turing-screen-desktop/releases/latest/download/Turing_Smart_Screen-1.1.0-x86_64.AppImage
+curl -fsSLO https://github.com/CheapAzHobbies/turing-screen-desktop/releases/latest/download/Turing_Smart_Screen-x86_64.AppImage
 chmod +x Turing_Smart_Screen-*.AppImage
 ./Turing_Smart_Screen-*.AppImage
 ```

@@ -14,7 +14,8 @@ permissions:
 
 env:
   UPSTREAM_REF: '3.10.0'
-  PY_VERSION: '3.12.7'
+  PY_SERIES: '3.12'
+  PY_TAG: '312'
 
 jobs:
   build:
@@ -39,9 +40,13 @@ jobs:
 
       - name: Fetch a relocatable CPython (includes tkinter)
         run: |
-          base="https://github.com/niess/python-appimage/releases/download/python3.12"
-          file="python${PY_VERSION}-cp312-cp312-manylinux2014_x86_64.AppImage"
-          curl -fsSL -o python.AppImage "$base/$file"
+          # Resolve the current patch release rather than pinning one that rots.
+          url=$(curl -fsSL "https://api.github.com/repos/niess/python-appimage/releases/tags/python${PY_SERIES}" \
+                | grep -o "https://[^\"]*cp${PY_TAG}-cp${PY_TAG}-manylinux2014_x86_64\.AppImage" \
+                | head -1)
+          [ -n "$url" ] || { echo "Could not resolve a python${PY_SERIES} AppImage"; exit 1; }
+          echo "Using $url"
+          curl -fsSL -o python.AppImage "$url"
           chmod +x python.AppImage
           ./python.AppImage --appimage-extract >/dev/null
           mv squashfs-root AppDir
@@ -111,10 +116,8 @@ jobs:
 
       - name: Build the AppImage
         run: |
-          version="${GITHUB_REF_NAME#v}"; [ -n "$version" ] || version="dev"
           export ARCH=x86_64
-          appimagetool --no-appstream AppDir \
-            "Turing_Smart_Screen-${version}-x86_64.AppImage"
+          appimagetool --no-appstream AppDir "Turing_Smart_Screen-x86_64.AppImage"
           ls -lh ./*.AppImage
 
       - name: Smoke-test the AppImage
