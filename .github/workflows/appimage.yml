@@ -30,7 +30,9 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends file desktop-file-utils zsync
+          # libfuse2: appimagetool is itself an AppImage, and the smoke test runs
+          # the image we build. Neither works without FUSE 2 on the runner.
+          sudo apt-get install -y --no-install-recommends file desktop-file-utils zsync libfuse2
 
       - name: Fetch appimagetool
         run: |

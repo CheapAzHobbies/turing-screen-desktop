@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-09-07
+
+### Fixed
+- Install libfuse2 on the build runner: appimagetool is itself an AppImage and
+  the smoke test runs the built image, so neither worked without FUSE 2.
+
 ## [1.1.1] - 2026-09-07
 
 ### Fixed
