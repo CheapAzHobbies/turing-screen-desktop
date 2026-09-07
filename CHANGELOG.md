@@ -3,6 +3,14 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.3] - 2026-09-07
+
+### Fixed
+- Build steps referenced `*.AppImage`, which also matched the downloaded
+  CPython base image: the smoke test resolved two paths, and the release would
+  have shipped a stray ~100 MB python.AppImage. Everything now names the
+  artifact explicitly, and the base image is deleted once extracted.
+
 ## [1.1.2] - 2026-09-07
 
 ### Fixed

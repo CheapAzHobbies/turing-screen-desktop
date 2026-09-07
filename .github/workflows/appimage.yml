@@ -52,6 +52,7 @@ jobs:
           chmod +x python.AppImage
           ./python.AppImage --appimage-extract >/dev/null
           mv squashfs-root AppDir
+          rm -f python.AppImage   # never let a later glob match the base image
           # Drop the base image's own metadata; ours replaces it.
           rm -f AppDir/*.desktop AppDir/*.png AppDir/AppRun AppDir/.DirIcon
           rm -rf AppDir/usr/share/applications AppDir/usr/share/metainfo
@@ -120,11 +121,11 @@ jobs:
         run: |
           export ARCH=x86_64
           appimagetool --no-appstream AppDir "Turing_Smart_Screen-x86_64.AppImage"
-          ls -lh ./*.AppImage
+          ls -lh Turing_Smart_Screen-x86_64.AppImage
 
       - name: Smoke-test the AppImage
         run: |
-          img=$(ls ./*.AppImage)
+          img="./Turing_Smart_Screen-x86_64.AppImage"
           chmod +x "$img"
           "$img" --help
           "$img" --where
@@ -137,13 +138,13 @@ jobs:
           du -sh "$HOME/.local/share/turing-screen/app"
 
       - name: Checksum
-        run: sha256sum ./*.AppImage > SHA256SUMS.txt
+        run: sha256sum Turing_Smart_Screen-x86_64.AppImage > SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: appimage
           path: |
-            *.AppImage
+            Turing_Smart_Screen-x86_64.AppImage
             SHA256SUMS.txt
 
       - name: Attach to the release
@@ -151,5 +152,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            *.AppImage
+            Turing_Smart_Screen-x86_64.AppImage
             SHA256SUMS.txt
