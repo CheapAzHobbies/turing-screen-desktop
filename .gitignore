@@ -1,0 +1,5 @@
+# nothing from a local test install belongs in the repo
+turing-smart-screen-python/
+dist/
+*.tar.gz
+*.swp

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Shell and desktop-entry checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck desktop-file-utils
+
+      - name: Shellcheck
+        run: shellcheck install.sh uninstall.sh share/turing-config.in share/turing-theme-editor.in share/turing-display.in
+
+      - name: Validate desktop entries
+        run: |
+          tmp=$(mktemp -d)
+          for f in share/*.desktop.in; do
+            sed -e 's|@BIN_DIR@|/usr/bin|g' -e 's|@APP_DIR@|/opt/app|g' \
+              "$f" > "$tmp/$(basename "${f%.in}")"
+          done
+          desktop-file-validate "$tmp"/*.desktop
+
+  install-test:
+    name: Installer runs on a clean machine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build a stand-in app checkout
+        run: |
+          mkdir -p fake-app/res/themes/DemoTheme fake-app/res/icons/monitor-icon-17865
+          touch fake-app/main.py fake-app/configure.py fake-app/theme-editor.py
+          echo "config:" > fake-app/config.yaml
+          echo "  THEME: DemoTheme" >> fake-app/config.yaml
+          : > fake-app/requirements.txt
+
+      - name: Run installer
+        run: ./install.sh --app-dir "$PWD/fake-app" -y
+
+      - name: Assert the launchers landed
+        run: |
+          set -e
+          for f in ~/.local/bin/turing-config \
+                   ~/.local/bin/turing-theme-editor \
+                   ~/.local/bin/turing-display \
+                   ~/.local/share/applications/turing-screen-config.desktop \
+                   ~/.local/share/applications/turing-screen-theme-editor.desktop \
+                   ~/.local/share/applications/turing-screen-display.desktop; do
+            test -e "$f" || { echo "missing: $f"; exit 1; }
+            echo "ok: $f"
+          done
+          grep -q "$PWD/fake-app" ~/.local/bin/turing-config
+
+      - name: Run uninstaller
+        run: |
+          ./uninstall.sh -y
+          test ! -e ~/.local/bin/turing-config || { echo "uninstall left files"; exit 1; }
+          echo "uninstall clean"

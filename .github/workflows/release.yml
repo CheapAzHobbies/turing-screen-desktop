@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tarball
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          stage="dist/turing-screen-desktop"
+          mkdir -p "$stage"
+          cp -r install.sh uninstall.sh share README.md LICENSE CHANGELOG.md "$stage/"
+          chmod +x "$stage/install.sh" "$stage/uninstall.sh"
+          tar -czf dist/turing-screen-desktop.tar.gz -C dist turing-screen-desktop
+          (cd dist && sha256sum turing-screen-desktop.tar.gz > turing-screen-desktop.tar.gz.sha256)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ env.VERSION }}
+          generate_release_notes: true
+          files: |
+            dist/turing-screen-desktop.tar.gz
+            dist/turing-screen-desktop.tar.gz.sha256
+          body: |
+            ## Install
+
+            ```bash
+            curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/turing-screen-desktop.tar.gz | tar xz
+            cd turing-screen-desktop
+            ./install.sh
+            ```
+
+            The installer finds or clones `turing-smart-screen-python`, builds the
+            virtualenv, checks serial permissions, and adds three launchers to your
+            applications menu. See the README for options and troubleshooting.

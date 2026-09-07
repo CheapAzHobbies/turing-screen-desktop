@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Turing Theme Editor
+GenericName=Smart Screen Theme Editor
+Comment=Edit the layout, colors and stats shown on your Turing smart screen
+Exec=@BIN_DIR@/turing-theme-editor
+Icon=turing-smart-screen
+Terminal=false
+Categories=Utility;
+Keywords=turing;smart;screen;theme;editor;display;lcd;layout;customize;skin;
+StartupNotify=true

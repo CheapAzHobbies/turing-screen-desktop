@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Turing smart screen - theme editor.
+# The upstream script requires a theme name, so this asks for one (defaulting to
+# the theme currently in config.yaml). Pass a name to skip the picker.
+# Installed by turing-screen-desktop. Do not edit; re-run install.sh instead.
+APP_DIR="@APP_DIR@"
+cd "$APP_DIR" 2>/dev/null || {
+    msg="Turing app folder is missing:\n$APP_DIR\n\nRe-run the installer to fix."
+    command -v zenity >/dev/null && zenity --error --width=380 --text="$msg" || printf '%b\n' "$msg" >&2
+    exit 1
+}
+
+PY="$APP_DIR/venv/bin/python"
+[ -n "${1:-}" ] && exec "$PY" theme-editor.py "$1"
+
+current=$(sed -n 's/^[[:space:]]*THEME:[[:space:]]*//p' config.yaml 2>/dev/null | head -1 | tr -d "\"'\r")
+
+# No zenity: just edit whatever theme is active.
+if ! command -v zenity >/dev/null; then
+    [ -z "$current" ] && { echo "Could not read THEME from config.yaml; pass a theme name." >&2; exit 1; }
+    exec "$PY" theme-editor.py "$current"
+fi
+
+args=()
+[ -n "$current" ] && args+=(TRUE "$current" "current")
+while IFS= read -r t; do
+    [ "$t" = "$current" ] && continue
+    args+=(FALSE "$t" "")
+done < <(find res/themes -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort -f)
+
+[ ${#args[@]} -eq 0 ] && { zenity --error --width=380 --text="No themes found in:\n$APP_DIR/res/themes"; exit 1; }
+[ -z "$current" ] && args[0]=TRUE
+
+choice=$(zenity --list --radiolist --title="Turing Theme Editor" \
+    --text="Which theme do you want to edit?" \
+    --column="" --column="Theme" --column="" \
+    --height=520 --width=460 "${args[@]}" 2>/dev/null) || exit 0
+[ -z "$choice" ] && exit 0
+exec "$PY" theme-editor.py "$choice"

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Turing Screen Configuration
+GenericName=Smart Screen Setup
+Comment=Set up your Turing smart screen: display model, port, brightness, theme and sensors
+Exec=@BIN_DIR@/turing-config
+Icon=turing-smart-screen
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=turing;smart;screen;display;lcd;monitor;usb;stats;hardware;config;setup;
+StartupNotify=true

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Turing Screen Display
+GenericName=Start Smart Screen
+Comment=Start pushing system stats to the Turing smart screen
+Exec=@BIN_DIR@/turing-display
+Icon=turing-smart-screen
+Terminal=false
+Categories=Utility;
+Keywords=turing;smart;screen;display;start;run;lcd;
+StartupNotify=false

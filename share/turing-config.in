@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Turing smart screen - configuration wizard.
+# Installed by turing-screen-desktop. Do not edit; re-run install.sh instead.
+APP_DIR="@APP_DIR@"
+cd "$APP_DIR" 2>/dev/null || {
+    msg="Turing app folder is missing:\n$APP_DIR\n\nRe-run the installer to fix."
+    command -v zenity >/dev/null && zenity --error --width=380 --text="$msg" || printf '%b\n' "$msg" >&2
+    exit 1
+}
+exec "$APP_DIR/venv/bin/python" configure.py "$@"
