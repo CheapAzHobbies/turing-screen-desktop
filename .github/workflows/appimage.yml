@@ -1,0 +1,150 @@
+name: AppImage
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: 'Upstream turing-smart-screen-python tag to bundle'
+        default: '3.10.0'
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REF: '3.10.0'
+  PY_VERSION: '3.12.7'
+
+jobs:
+  build:
+    name: Build AppImage (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick upstream ref
+        run: echo "REF=${{ github.event.inputs.upstream_ref || env.UPSTREAM_REF }}" >> "$GITHUB_ENV"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends file desktop-file-utils zsync
+
+      - name: Fetch appimagetool
+        run: |
+          curl -fsSL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+
+      - name: Fetch a relocatable CPython (includes tkinter)
+        run: |
+          base="https://github.com/niess/python-appimage/releases/download/python3.12"
+          file="python${PY_VERSION}-cp312-cp312-manylinux2014_x86_64.AppImage"
+          curl -fsSL -o python.AppImage "$base/$file"
+          chmod +x python.AppImage
+          ./python.AppImage --appimage-extract >/dev/null
+          mv squashfs-root AppDir
+          # Drop the base image's own metadata; ours replaces it.
+          rm -f AppDir/*.desktop AppDir/*.png AppDir/AppRun AppDir/.DirIcon
+          rm -rf AppDir/usr/share/applications AppDir/usr/share/metainfo
+
+      - name: Verify tkinter is present in the bundled Python
+        run: |
+          AppDir/usr/bin/python3 -c 'import tkinter, sys; print("tkinter", tkinter.TkVersion, "on", sys.version.split()[0])'
+
+      - name: Clone upstream
+        run: |
+          git clone --depth 1 --branch "$REF" \
+            https://github.com/mathoudebine/turing-smart-screen-python.git upstream
+          rm -rf upstream/.git upstream/tests \
+                 upstream/external/LibreHardwareMonitor upstream/external/PawnIO \
+                 upstream/tools/windows-installer
+          du -sh upstream
+
+      - name: Install Python dependencies into the image
+        run: |
+          # Windows-only wheels never resolve on Linux; strip those lines.
+          grep -viE 'pywinstyles|pythonnet|pywin32|pyadl' upstream/requirements.txt > reqs.txt
+          AppDir/usr/bin/python3 -m pip install --no-cache-dir --upgrade pip
+          AppDir/usr/bin/python3 -m pip install --no-cache-dir --target AppDir/opt/deps -r reqs.txt
+          # pyinstaller is a build tool for upstream's own Windows packaging; not needed at runtime.
+          rm -rf AppDir/opt/deps/PyInstaller AppDir/opt/deps/pyinstaller* AppDir/opt/deps/bin
+
+      - name: Assemble the AppDir
+        run: |
+          mkdir -p AppDir/opt/turing
+          cp -r upstream/. AppDir/opt/turing/
+          echo "${REF}" > AppDir/opt/VERSION
+
+          install -m 755 share/AppRun AppDir/AppRun
+
+          cat > AppDir/turing-smart-screen.desktop <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Turing Smart Screen
+          GenericName=Smart Screen Display
+          Comment=Show system stats on a Turing / XuanFang USB smart screen
+          Exec=AppRun
+          Icon=turing-smart-screen
+          Terminal=false
+          Categories=Utility;
+          Keywords=turing;smart;screen;display;lcd;monitor;usb;stats;hardware;
+          Actions=Configure;ThemeEditor;
+
+          [Desktop Action Configure]
+          Name=Configuration Wizard
+          Exec=AppRun --config
+
+          [Desktop Action ThemeEditor]
+          Name=Theme Editor
+          Exec=AppRun --theme-editor
+          DESKTOP
+
+          cp AppDir/opt/turing/res/icons/monitor-icon-17865/128.png AppDir/turing-smart-screen.png
+          cp AppDir/turing-smart-screen.png AppDir/.DirIcon
+          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/128x128/apps
+          cp AppDir/turing-smart-screen.desktop AppDir/usr/share/applications/
+          cp AppDir/turing-smart-screen.png AppDir/usr/share/icons/hicolor/128x128/apps/
+
+          desktop-file-validate AppDir/turing-smart-screen.desktop
+
+      - name: Build the AppImage
+        run: |
+          version="${GITHUB_REF_NAME#v}"; [ -n "$version" ] || version="dev"
+          export ARCH=x86_64
+          appimagetool --no-appstream AppDir \
+            "Turing_Smart_Screen-${version}-x86_64.AppImage"
+          ls -lh ./*.AppImage
+
+      - name: Smoke-test the AppImage
+        run: |
+          img=$(ls ./*.AppImage)
+          chmod +x "$img"
+          "$img" --help
+          "$img" --where
+          # Confirm the writable working tree gets built and config.yaml is writable.
+          test -f "$HOME/.local/share/turing-screen/app/config.yaml"
+          test -w "$HOME/.local/share/turing-screen/app/config.yaml"
+          # Confirm the big assets stayed as symlinks into the image.
+          test -L "$HOME/.local/share/turing-screen/app/res/fonts"
+          echo "smoke test passed"
+          du -sh "$HOME/.local/share/turing-screen/app"
+
+      - name: Checksum
+        run: sha256sum ./*.AppImage > SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: |
+            *.AppImage
+            SHA256SUMS.txt
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.AppImage
+            SHA256SUMS.txt

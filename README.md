@@ -24,6 +24,38 @@ preselected.
 
 ## Install
 
+### Option 1 — AppImage (nothing to set up)
+
+One file, no Python, no virtualenv, no cloning. Download it, make it executable,
+run it. Works on any distro with FUSE.
+
+```bash
+curl -fsSLO https://github.com/CheapAzHobbies/turing-screen-desktop/releases/latest/download/Turing_Smart_Screen-1.1.0-x86_64.AppImage
+chmod +x Turing_Smart_Screen-*.AppImage
+./Turing_Smart_Screen-*.AppImage
+```
+
+Or just download it from the [releases page](https://github.com/CheapAzHobbies/turing-screen-desktop/releases/latest),
+right-click → Properties → *Allow executing as program*, and double-click it.
+
+The first run opens the configuration wizard; after that it starts the display.
+
+```
+./Turing_Smart_Screen-*.AppImage --config          # configuration wizard
+./Turing_Smart_Screen-*.AppImage --theme-editor    # pick a theme and edit it
+./Turing_Smart_Screen-*.AppImage --display         # start the display
+./Turing_Smart_Screen-*.AppImage --where           # where settings are kept
+```
+
+Settings live in `~/.local/share/turing-screen/app/` and survive replacing the
+AppImage with a newer one. It is a large download (~1 GB) because upstream ships
+about 850 MB of theme artwork and 190 MB of fonts, all bundled so it works offline.
+
+To get it into your applications menu, use [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever)
+or [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher).
+
+### Option 2 — Installer script (menu launchers, smaller download)
+
 Download the latest release, unpack it, and run the installer:
 
 ```bash
@@ -56,13 +88,31 @@ only if a system package or a group change is needed, and only after asking.
 
 ## Requirements
 
+Only for the installer script — the AppImage needs none of this.
+
 - Linux with a freedesktop-compatible menu (GNOME, KDE, XFCE, Cinnamon…)
 - Python 3.9–3.14
-- `python3-venv`, `python3-tk`, `git` — the installer offers to apt-install these
+- venv, tkinter and git — the installer offers to fetch these for you
 - `zenity` (optional) for the theme picker
 - Membership of the `dialout` group for USB serial access
 
-The installer checks all of these and tells you exactly what is missing.
+The installer detects your package manager (**apt**, **dnf**, **pacman**,
+**zypper** or **apk**) and offers to install what is missing. To do it yourself
+first:
+
+| Distro | Command |
+|---|---|
+| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install python3-venv python3-tk git zenity` |
+| Fedora / RHEL / Rocky | `sudo dnf install python3-tkinter git zenity` |
+| Arch / Manjaro / EndeavourOS | `sudo pacman -S python tk git zenity` |
+| openSUSE | `sudo zypper install python3 python3-tk git zenity` |
+| Alpine | `sudo apk add python3 python3-tkinter git zenity` |
+
+Then add yourself to the serial group (log out and back in afterwards):
+
+```bash
+sudo usermod -aG dialout "$USER"     # dialout on most distros, uucp on Arch
+```
 
 ## Uninstall
 

@@ -62,6 +62,46 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# ---------------------------------------------------------------- distro support
+# Package names differ per distro; resolve them from a single logical name.
+detect_pm() {
+    for pm in apt-get dnf pacman zypper apk; do
+        command -v "$pm" >/dev/null && { echo "$pm"; return; }
+    done
+    echo ""
+}
+PM="$(detect_pm)"
+
+pkg_name() { # pkg_name <venv|tk|git|zenity>
+    case "$PM:$1" in
+        apt-get:venv)  echo "python3-venv" ;;
+        apt-get:tk)    echo "python3-tk" ;;
+        dnf:venv)      echo "python3-libs" ;;
+        dnf:tk)        echo "python3-tkinter" ;;
+        pacman:venv)   echo "python" ;;
+        pacman:tk)     echo "tk" ;;
+        zypper:venv)   echo "python3" ;;
+        zypper:tk)     echo "python3-tk" ;;
+        apk:venv)      echo "python3" ;;
+        apk:tk)        echo "python3-tkinter" ;;
+        *:git)         echo "git" ;;
+        *:zenity)      echo "zenity" ;;
+        *)             echo "" ;;
+    esac
+}
+
+pkg_install() { # pkg_install pkg...
+    [ $# -eq 0 ] && return 0
+    case "$PM" in
+        apt-get) sudo apt-get update -qq && sudo apt-get install -y "$@" ;;
+        dnf)     sudo dnf install -y "$@" ;;
+        pacman)  sudo pacman -S --needed --noconfirm "$@" ;;
+        zypper)  sudo zypper --non-interactive install "$@" ;;
+        apk)     sudo apk add "$@" ;;
+        *)       return 1 ;;
+    esac
+}
+
 ask() { # ask "question" -> 0 for yes
     [ "$ASSUME_YES" = 1 ] && return 0
     [ -t 0 ] || return 1
@@ -77,34 +117,34 @@ PYV=$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')
 PYOK=$(python3 -c 'import sys;v=sys.version_info[:2];print(1 if (3,9)<=v<=(3,14) else 0)')
 [ "$PYOK" = 1 ] || die "Python $PYV found, but this app supports 3.9-3.14 only."
 ok "Python $PYV"
+if [ -n "$PM" ]; then ok "Package manager: $PM"; else warn "No known package manager - you may need to install dependencies by hand."; fi
 
 MISSING_PKGS=()
-python3 -m venv --help >/dev/null 2>&1 || MISSING_PKGS+=("python3-venv")
-python3 -c 'import tkinter' 2>/dev/null || MISSING_PKGS+=("python3-tk")
-command -v git >/dev/null || MISSING_PKGS+=("git")
+python3 -m venv --help >/dev/null 2>&1 || MISSING_PKGS+=("$(pkg_name venv)")
+python3 -c 'import tkinter' 2>/dev/null      || MISSING_PKGS+=("$(pkg_name tk)")
+command -v git >/dev/null                    || MISSING_PKGS+=("$(pkg_name git)")
 
 if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
     warn "Missing system packages: ${MISSING_PKGS[*]}"
-    if command -v apt-get >/dev/null; then
-        if ask "Install them with sudo apt-get?"; then
-            sudo apt-get update -qq && sudo apt-get install -y "${MISSING_PKGS[@]}"
-            ok "System packages installed"
+    if [ -n "$PM" ]; then
+        if ask "Install them now with $PM (needs sudo)?"; then
+            pkg_install "${MISSING_PKGS[@]}" && ok "System packages installed"
         else
             die "Cannot continue without: ${MISSING_PKGS[*]}"
         fi
     else
-        die "Install these with your package manager, then re-run: ${MISSING_PKGS[*]}"
+        die "No supported package manager found. Install these, then re-run: ${MISSING_PKGS[*]}"
     fi
 else
-    ok "python3-venv, tkinter, git"
+    ok "venv, tkinter, git"
 fi
 
 if command -v zenity >/dev/null; then
     ok "zenity (theme picker)"
 else
     warn "zenity not found - the theme editor will just open the active theme."
-    if command -v apt-get >/dev/null && ask "Install zenity for the theme picker?"; then
-        sudo apt-get install -y zenity && ok "zenity installed"
+    if [ -n "$PM" ] && ask "Install zenity for the theme picker?"; then
+        pkg_install "$(pkg_name zenity)" && ok "zenity installed"
     fi
 fi
 
