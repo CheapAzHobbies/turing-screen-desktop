@@ -15,7 +15,6 @@ python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$TMP/configure
 fail=0
 need() { grep -q "$1" "$TMP/configure.py" || { echo "  MISSING: $2"; fail=1; }; }
 need 'text="Run at startup"'      '"Run at startup" checkbox'
-need 'ts_reset_cb'                'reset-on-startup checkbox'
 need 'ts_close_btn'               'Close button'
 need 'text="Apply to screen"'     'renamed apply button'
 need '820x620'                    'enlarged window'

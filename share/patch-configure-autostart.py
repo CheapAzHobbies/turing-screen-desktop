@@ -32,30 +32,6 @@ def _ts_autostart_enabled():
         return False
 
 
-def _ts_reset_on_startup():
-    try:
-        import ruamel.yaml
-        with open(MAIN_DIRECTORY / "config.yaml", "rt", encoding="utf-8") as f:
-            data = ruamel.yaml.YAML().load(f)
-        return bool(data["display"].get("RESET_ON_STARTUP", True))
-    except Exception:
-        return True
-
-
-def _ts_set_reset_on_startup(enabled):
-    try:
-        import ruamel.yaml
-        yaml = ruamel.yaml.YAML()
-        path = MAIN_DIRECTORY / "config.yaml"
-        with open(path, "rt", encoding="utf-8") as f:
-            data = yaml.load(f)
-        data["display"]["RESET_ON_STARTUP"] = bool(enabled)
-        with open(path, "wt", encoding="utf-8") as f:
-            yaml.dump(data, f)
-    except Exception:
-        pass
-
-
 def _ts_autostart_set(enabled):
     helper = _ts_autostart_helper()
     if not helper:
@@ -77,16 +53,6 @@ WIDGET = '''
                 command=lambda: _ts_autostart_set(self.ts_autostart_var.get()))
             self.ts_autostart_cb.place(x=18, y=584)
 
-            # Upstream sends a hardware RESET at startup, which reboots the panel:
-            # it flashes, shows its firmware screen, then waits 5s before drawing.
-            # Upstream's own config note says rev. A displays are better off
-            # without it, but it is not exposed anywhere in the UI.
-            self.ts_reset_var = IntVar(value=1 if _ts_reset_on_startup() else 0)
-            self.ts_reset_cb = ttk.Checkbutton(
-                self.window, text="Reset screen on startup (slower, avoids glitches)",
-                variable=self.ts_reset_var,
-                command=lambda: _ts_set_reset_on_startup(self.ts_reset_var.get()))
-            self.ts_reset_cb.place(x=170, y=584)
 
             self.ts_close_btn = ttk.Button(self.window, text="Close",
                                            command=lambda: self.window.destroy())
@@ -138,7 +104,7 @@ def patch(path: Path) -> None:
     src = src.replace(anchor, 'text="Apply to screen"', 1)
 
     path.write_text(src, encoding="utf-8")
-    print(f"patched {path}: Run at startup, reset option, Close button, "
+    print(f"patched {path}: Run at startup, Close button, "
           f"Apply to screen keeps the window open")
 
 

@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-09-08
+
+### Changed
+- **"Save and run" is now "Apply to screen" and no longer closes the window.**
+  Adjusting a value meant reopening the app every time; now you can keep
+  tweaking and applying.
+
+### Added
+- **Close button** in the settings window.
+
+### Removed
+- The "Reset screen on startup" checkbox added in 1.5.0. The flash it avoided
+  only appears when reconfiguring a screen that is already running, never at
+  boot, so the option was not worth the extra control.
+
 ## [1.5.0] - 2026-09-08
 
 ### Added
