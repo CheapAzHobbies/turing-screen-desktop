@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ['v*']
+    branches: [main]   # build an artifact on main so it can be tested before tagging
 
 permissions:
   contents: write
@@ -99,22 +100,26 @@ jobs:
           [Desktop Entry]
           Type=Application
           Name=Turing Smart Screen
-          GenericName=Smart Screen Display
-          Comment=Show system stats on a Turing / XuanFang USB smart screen
+          GenericName=Smart Screen Settings
+          Comment=Configure and run a Turing / XuanFang USB smart screen
           Exec=AppRun
           Icon=turing-smart-screen
           Terminal=false
           Categories=Utility;
           Keywords=turing;smart;screen;display;lcd;monitor;usb;stats;hardware;
-          Actions=Configure;ThemeEditor;
+          Actions=StartDisplay;ThemeEditor;StopDisplay;
 
-          [Desktop Action Configure]
-          Name=Configuration Wizard
-          Exec=AppRun --config
+          [Desktop Action StartDisplay]
+          Name=Start Display
+          Exec=AppRun --display
 
           [Desktop Action ThemeEditor]
           Name=Theme Editor
           Exec=AppRun --theme-editor
+
+          [Desktop Action StopDisplay]
+          Name=Stop Display
+          Exec=AppRun --stop
           DESKTOP
           cp AppDir/opt/turing/res/icons/monitor-icon-17865/128.png AppDir/turing-smart-screen.png
           cp AppDir/turing-smart-screen.png AppDir/.DirIcon
@@ -153,6 +158,7 @@ jobs:
   publish:
     name: Publish release
     needs: [tarball, appimage]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

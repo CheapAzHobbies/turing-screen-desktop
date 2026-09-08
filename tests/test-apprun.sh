@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2034,SC2030,SC2031
+# SC2016/SC2034: assertions are single-quoted on purpose - check() defers them
+#   to eval so they run after the step under test, and $out is consumed there.
+# SC2030/SC2031: each run_app call is deliberately isolated in its own subshell;
+#   the env changes are meant to be local to it.
+# Regression tests for share/AppRun.
+#
+# These build fake "mounted AppImage" trees and stub the bundled interpreter, so
+# the whole thing runs headless with no hardware, no real Python deps and no
+# network. Every test here corresponds to a way this has broken, or could.
+
+set -uo pipefail
+
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APPRUN="$ROOT/share/AppRun"
+HOME_REAL="$HOME"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+pass=0; fail=0
+if [ -t 1 ]; then G=$'\033[32m'; R=$'\033[31m'; N=$'\033[0m'; else G=""; R=""; N=""; fi
+ok()   { pass=$((pass+1)); printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
+bad()  { fail=$((fail+1)); printf '  %s✗%s %s\n' "$R" "$N" "$1"; [ -n "${2:-}" ] && printf '      %s\n' "$2"; }
+check(){ if eval "$2"; then ok "$1"; else bad "$1" "${3:-}"; fi; }
+
+# Build a fake extracted image at $1 with bundled version $2.
+make_image() {
+    local dir="$1" version="${2:-3.10.0}"
+    mkdir -p "$dir/opt/turing/library" "$dir/opt/turing/res"/{fonts,backgrounds,icons,docs} \
+             "$dir/opt/turing/res/themes"/{ThemeOne,ThemeTwo} "$dir/usr/bin" "$dir/opt/deps"
+    echo "$version" > "$dir/opt/VERSION"
+    printf '#!/usr/bin/env python\nprint("main")\n'      > "$dir/opt/turing/main.py"
+    printf '#!/usr/bin/env python\nprint("configure")\n' > "$dir/opt/turing/configure.py"
+    printf '#!/usr/bin/env python\nprint("editor")\n'    > "$dir/opt/turing/theme-editor.py"
+    printf 'x = 1\n' > "$dir/opt/turing/library/config.py"
+    printf 'config:\n  THEME: ThemeOne\n' > "$dir/opt/turing/config.yaml"
+    printf 'default\n' > "$dir/opt/turing/res/themes/default.yaml"
+    printf 'one\n' > "$dir/opt/turing/res/themes/ThemeOne/theme.yaml"
+    printf 'two\n' > "$dir/opt/turing/res/themes/ThemeTwo/theme.yaml"
+    printf 'font\n' > "$dir/opt/turing/res/fonts/f.ttf"
+    # Stub interpreter: records how it was invoked instead of running Python.
+    cat > "$dir/usr/bin/python3" <<'STUB'
+#!/bin/sh
+echo "PYTHON_CALLED: $*" >> "${STUB_LOG:-/dev/null}"
+exit 0
+STUB
+    chmod +x "$dir/usr/bin/python3"
+    install -m755 "$APPRUN" "$dir/AppRun"
+}
+
+run_app() { # run_app <image> [args...]
+    ( export XDG_DATA_HOME="$TMP/data" XDG_CONFIG_HOME="$TMP/config" HOME="$TMP/home" STUB_LOG="$TMP/calls.log"
+      PATH="$TMP/nozenity:$PATH" "$1/AppRun" "${@:2}" ) 2>&1
+}
+
+# Two distinct situations, easy to conflate:
+#   cancelling  - zenity IS present and the user dismisses the dialog -> do nothing
+#   absent      - zenity is NOT installed at all -> fall back to the active theme
+# "cancel" is a stub that exits non-zero; "absent" is a PATH with no zenity on it.
+mkdir -p "$TMP/nozenity" "$TMP/bin" "$TMP/home"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/nozenity/zenity"; chmod +x "$TMP/nozenity/zenity"
+for t in bash sh sed find sort grep head cat mkdir rm cp ln chmod readlink dirname \
+         basename pgrep flock tr sleep kill env printf touch install; do
+    src="$(command -v "$t" 2>/dev/null)" && ln -sf "$src" "$TMP/bin/$t"
+done
+
+run_app_nozenity() { # same as run_app but with zenity genuinely unavailable
+    ( export XDG_DATA_HOME="$TMP/data" XDG_CONFIG_HOME="$TMP/config" HOME="$TMP/home" STUB_LOG="$TMP/calls.log"
+      PATH="$TMP/bin" "$1/AppRun" "${@:2}" ) 2>&1
+}
+
+WORK="$TMP/data/turing-screen/app"
+
+echo "AppRun regression tests"
+echo
+
+# ---------------------------------------------------------------- first run
+make_image "$TMP/mnt-a"
+run_app "$TMP/mnt-a" --where >/dev/null
+check "first run builds the working tree"        '[ -d "$WORK" ]'
+check "config.yaml is created"                   '[ -f "$WORK/config.yaml" ]'
+check "config.yaml is writable"                  '[ -w "$WORK/config.yaml" ]'
+check "library/ is a real dir, not a symlink"    '[ -d "$WORK/library" ] && [ ! -L "$WORK/library" ]' \
+      "config.py resolves __file__; a symlink would lead back into the read-only mount"
+check "res/fonts is a symlink (assets not copied)" '[ -L "$WORK/res/fonts" ]'
+check "theme symlink resolves"                   '[ -e "$WORK/res/themes/ThemeOne" ]'
+
+# ------------------------------------------------- the v1.2.1 regression
+# An AppImage mounts somewhere new every launch; links must be re-pointed.
+make_image "$TMP/mnt-b"
+run_app "$TMP/mnt-b" --where >/dev/null
+check "assets re-point after the mount path changes" \
+      '[ "$(readlink "$WORK/res/fonts")" = "$TMP/mnt-b/opt/turing/res/fonts" ]' \
+      "this is the bug that made every launch after the first fail"
+check "theme link resolves from the new mount"   '[ -e "$WORK/res/themes/ThemeOne" ]'
+check "fonts link actually resolves"             '[ -e "$WORK/res/fonts" ]'
+
+# ---------------------------------------------------------------- settings
+echo 'config:
+  THEME: MyCustomChoice' > "$WORK/config.yaml"
+run_app "$TMP/mnt-a" --where >/dev/null
+check "user settings survive a relaunch" \
+      'grep -q MyCustomChoice "$WORK/config.yaml"' \
+      "config.yaml must never be overwritten once it exists"
+
+# ------------------------------------------------------- version upgrade
+make_image "$TMP/mnt-c" "3.11.0"
+run_app "$TMP/mnt-c" --where >/dev/null
+check "code refreshes on a version bump"   '[ "$(cat "$WORK/.built-from")" = "3.11.0" ]'
+check "settings survive a version bump"    'grep -q MyCustomChoice "$WORK/config.yaml"' \
+      "an upgrade must not reset the user's configuration"
+
+# ------------------------------------------------------ edited themes kept
+rm -f "$WORK/res/themes/ThemeTwo"
+mkdir -p "$WORK/res/themes/ThemeTwo"
+echo "edited by hand" > "$WORK/res/themes/ThemeTwo/theme.yaml"
+run_app "$TMP/mnt-b" --where >/dev/null
+check "an edited theme is not clobbered by a relaunch" \
+      'grep -q "edited by hand" "$WORK/res/themes/ThemeTwo/theme.yaml"' \
+      "materialised themes are real dirs and must survive re-linking"
+check "an edited theme stays a real directory" '[ ! -L "$WORK/res/themes/ThemeTwo" ]'
+
+# --------------------------------------------------------------- shebangs
+check "copied scripts point at the bundled interpreter" \
+      'head -1 "$WORK/configure.py" | grep -q "$WORK/.python"' \
+      "upstream ships #!/usr/bin/env python, which usually does not exist"
+check "the interpreter shim exists and is executable" '[ -x "$WORK/.python" ]'
+check "the shim targets the current mount" \
+      'grep -q "$TMP/mnt-b/usr/bin/python3" "$WORK/.python"'
+check "the shim exports PYTHONPATH for bundled deps" \
+      'grep -q "PYTHONPATH" "$WORK/.python"'
+check "tray Configure can actually execute configure.py" \
+      '"$WORK/configure.py" >/dev/null 2>&1' \
+      "main.py launches this file directly from the tray menu"
+
+# ------------------------------------------------------------ entry points
+: > "$TMP/calls.log"
+run_app "$TMP/mnt-b" --config >/dev/null
+check "--config runs configure.py" 'grep -q "PYTHON_CALLED: configure.py" "$TMP/calls.log"'
+
+: > "$TMP/calls.log"
+run_app "$TMP/mnt-b" --display >/dev/null
+check "--display runs main.py"     'grep -q "PYTHON_CALLED: main.py" "$TMP/calls.log"'
+
+out="$(run_app "$TMP/mnt-b" --help)"
+check "--help prints usage"        'echo "$out" | grep -q -- "--theme-editor"'
+out="$(run_app "$TMP/mnt-b" --where)"
+check "--where reports the workdir" 'echo "$out" | grep -q "workdir:"'
+
+# --------------------------------------------------- zenity behaviour
+# Cancelling the picker must do nothing at all.
+: > "$TMP/calls.log"
+run_app "$TMP/mnt-b" --theme-editor >/dev/null
+check "cancelling the theme picker launches nothing" \
+      '! grep -q "PYTHON_CALLED" "$TMP/calls.log"'
+
+# With zenity genuinely missing, fall back to the configured theme rather than
+# silently doing nothing.
+: > "$TMP/calls.log"
+run_app_nozenity "$TMP/mnt-b" --theme-editor >/dev/null
+check "theme editor falls back to the active theme when zenity is absent" \
+      'grep -q "PYTHON_CALLED: theme-editor.py" "$TMP/calls.log"' \
+      "must not silently do nothing on a system without zenity"
+
+# A no-argument launch opens the configuration window - the one thing clicking
+# the app should ever do.
+: > "$TMP/calls.log"
+run_app "$TMP/mnt-b" >/dev/null
+check "clicking the app opens the configuration window" \
+      'grep -q "PYTHON_CALLED: configure.py" "$TMP/calls.log"' \
+      "must not start the display or show a menu"
+
+: > "$TMP/calls.log"
+run_app_nozenity "$TMP/mnt-b" >/dev/null
+check "clicking the app works without zenity too" \
+      'grep -q "PYTHON_CALLED: configure.py" "$TMP/calls.log"'
+
+# An explicit theme name skips the picker entirely.
+: > "$TMP/calls.log"
+run_app "$TMP/mnt-b" --theme-editor ThemeOne >/dev/null
+check "an explicit theme name bypasses the picker" \
+      'grep -q "PYTHON_CALLED: theme-editor.py ThemeOne" "$TMP/calls.log"'
+
+check "editing a theme makes it a real writable directory" \
+      '[ ! -L "$WORK/res/themes/ThemeOne" ] && [ -w "$WORK/res/themes/ThemeOne" ]' \
+      "themes live read-only in the image until edited"
+
+# ------------------------------------------------------------- robustness
+run_app "$TMP/mnt-b" --stop >/dev/null 2>&1
+check "--stop is safe when nothing is running" '[ $? -eq 0 ]'
+
+mkdir -p "$TMP/data/turing-screen/app/res/themes/Weird Name With Spaces"
+run_app "$TMP/mnt-b" --where >/dev/null
+check "a theme name with spaces does not break relinking" '[ -d "$WORK" ]'
+
+rm -rf "$WORK"
+run_app "$TMP/mnt-b" --where >/dev/null
+check "recovers if the working tree is deleted" '[ -f "$WORK/config.yaml" ]'
+
+chmod -w "$WORK/config.yaml" 2>/dev/null
+run_app "$TMP/mnt-b" --where >/dev/null 2>&1
+check "survives a read-only config.yaml" '[ -d "$WORK" ]'
+chmod +w "$WORK/config.yaml" 2>/dev/null
+
+# ------------------------------------------------------- single instance
+check "the shim guards main.py against duplicates" \
+      'grep -q "flock" "$WORK/.python" && grep -q "main.py" "$WORK/.python"' \
+      "the wizard's own Save-and-run must not be able to start a second display"
+
+out="$(run_app "$TMP/mnt-b" --help)"
+check "help documents the single-window guarantee" \
+      'echo "$out" | grep -qi "only one"'
+
+# ------------------------------------------------------------- autostart
+out="$(run_app "$TMP/mnt-b" --autostart)"
+check "autostart is off by default" 'echo "$out" | grep -q "disabled"'
+
+run_app "$TMP/mnt-b" --autostart on >/dev/null 2>&1
+check "autostart on writes a desktop entry" \
+      '[ -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
+check "autostart on writes a resilient launcher" \
+      'grep -q "Turing_Smart_Screen\*.AppImage" "$TMP/home/.local/bin/turing-smart-screen"' \
+      "must still find the image after AppImageLauncher renames it on update"
+out="$(run_app "$TMP/mnt-b" --autostart)"
+check "autostart status reports enabled" 'echo "$out" | grep -q "enabled"'
+run_app "$TMP/mnt-b" --autostart off >/dev/null 2>&1
+check "autostart off removes the entry" '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
+check "autostart off removes the launcher" '[ ! -f "$TMP/home/.local/bin/turing-smart-screen" ]'
+check "tests leave the real HOME untouched" \
+      '[ ! -f "$HOME_REAL/.config/autostart/turing-smart-screen.desktop" ]' \
+      "a test must never write into the developer's home"
+
+echo
+echo "  $pass passed, $fail failed"
+[ "$fail" -eq 0 ]
