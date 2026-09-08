@@ -83,6 +83,11 @@ jobs:
                  upstream/tools/windows-installer
           du -sh upstream
 
+      - name: Add the "Start at login" checkbox to the config window
+        run: |
+          python3 share/patch-configure-autostart.py upstream/configure.py
+          grep -q "ts_autostart_cb" upstream/configure.py
+
       - name: Install Python dependencies into the image
         run: |
           grep -viE 'pywinstyles|pythonnet|pywin32|pyadl' upstream/requirements.txt > reqs.txt

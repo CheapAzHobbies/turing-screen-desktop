@@ -213,6 +213,19 @@ out="$(run_app "$TMP/mnt-b" --help)"
 check "help documents the single-window guarantee" \
       'echo "$out" | grep -qi "only one"'
 
+# ------------------------------------------- checkbox helper
+check "the autostart helper is generated" '[ -x "$WORK/.autostart-helper" ]'
+out="$("$WORK/.autostart-helper" status)"
+check "helper reports disabled initially" 'echo "$out" | grep -q disabled'
+HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/config" "$WORK/.autostart-helper" on >/dev/null
+check "helper can enable autostart" \
+      '[ -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
+check "helper writes a resilient launcher" \
+      'grep -q "Turing_Smart_Screen\*.AppImage" "$TMP/home/.local/bin/turing-smart-screen"'
+HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/config" "$WORK/.autostart-helper" off >/dev/null
+check "helper can disable autostart" \
+      '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
+
 # ------------------------------------------- first-run autostart prompt
 # zenity is stubbed to fail (= user says no), so nothing should be enabled,
 # but the question must be marked as asked so it never repeats.
