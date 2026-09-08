@@ -248,7 +248,9 @@ display_pids() {
         [ "$(readlink -f "/proc/$p/cwd" 2>/dev/null)" = "$(readlink -f "$WORK")" ] || continue
         a0=$(tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | sed -n 1p)
         a1=$(tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | sed -n 2p)
-        case "$a0" in *python*) ;; *) continue ;; esac
+        # Basename, not substring: our own shim is called ".python" and would
+        # otherwise match, so a launch would kill the process doing the launching.
+        case "${a0##*/}" in python*) ;; *) continue ;; esac
         case "$a1" in main.py|*/main.py) ;; *) continue ;; esac
         printf '%s ' "$p"
     done

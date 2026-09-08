@@ -16,6 +16,10 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APPRUN="$ROOT/share/AppRun"
 HOME_REAL="$HOME"
+# Snapshot, so we assert the SUITE changed nothing rather than assuming the
+# developer's machine started clean.
+REAL_AUTOSTART="$HOME/.config/autostart/turing-smart-screen.desktop"
+REAL_AUTOSTART_BEFORE=absent; [ -f "$REAL_AUTOSTART" ] && REAL_AUTOSTART_BEFORE=present
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -250,6 +254,18 @@ sleep 1
 check "a display started by absolute path IS stopped by a new start" \
       '! kill -0 '"$wizard_style"' 2>/dev/null' \
       "this is the exact case Save and run hits"
+# The shim is literally named ".python" and passes an absolute main.py path.
+# A substring match on "python" made it recognise itself and commit suicide.
+( cd "$WORK" && exec -a "$WORK/.python" sleep 30 ) &
+shim_lookalike=$!
+sleep 1
+run_app "$TMP/mnt-b" --display >/dev/null 2>&1 || true
+sleep 1
+check "the .python shim is never mistaken for the display" \
+      'kill -0 '"$shim_lookalike"' 2>/dev/null' \
+      "a substring match on python made the launcher kill itself"
+kill "$shim_lookalike" 2>/dev/null || true
+
 check "a bystander mentioning main.py is NOT stopped" \
       'kill -0 '"$bystander"' 2>/dev/null' \
       "matching command lines loosely once killed a real terminal"
@@ -309,8 +325,9 @@ check "autostart status reports enabled" 'echo "$out" | grep -q "enabled"'
 run_app "$TMP/mnt-b" --autostart off >/dev/null 2>&1
 check "autostart off removes the entry" '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
 check "autostart off removes the launcher" '[ ! -f "$TMP/home/.local/bin/turing-smart-screen" ]'
-check "tests leave the real HOME untouched" \
-      '[ ! -f "$HOME_REAL/.config/autostart/turing-smart-screen.desktop" ]' \
+real_after=absent; [ -f "$REAL_AUTOSTART" ] && real_after=present
+check "the suite leaves the real HOME exactly as it found it" \
+      '[ "$real_after" = "$REAL_AUTOSTART_BEFORE" ]' \
       "a test must never write into the developer's home"
 
 echo
