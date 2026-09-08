@@ -24,8 +24,12 @@ die() {
     exit 1
 }
 
-# --- build (or refresh) the writable working tree -------------------------
-sync_tree() {
+# --- writable working tree ------------------------------------------------
+# The image mounts at a fresh /tmp/.mount_XXXXXX on every launch and is
+# unmounted on exit, so every symlink into it dies the moment we quit. Asset
+# links must therefore be re-pointed on EVERY run, not just when the bundled
+# version changes.
+sync_code() {
     mkdir -p "$WORK/res"
 
     # Code must be REAL files: config.py does Path(__file__).parent.parent.resolve(),
@@ -35,6 +39,13 @@ sync_tree() {
     for f in main.py configure.py theme-editor.py simple-program.py; do
         [ -f "$SRC/$f" ] && cp -f "$SRC/$f" "$WORK/$f"
     done
+
+    [ -f "$WORK/config.yaml" ] || cp -f "$SRC/config.yaml" "$WORK/config.yaml"
+    echo "$VERSION" > "$STAMP"
+}
+
+link_assets() {
+    mkdir -p "$WORK/res"
 
     # Big read-only asset dirs stay in the image.
     for d in fonts backgrounds icons docs; do
@@ -56,14 +67,14 @@ sync_tree() {
         ln -sfn "$t" "$target"
     done
 
-    # config.yaml is the one file the app must be able to write.
-    [ -f "$WORK/config.yaml" ] || cp -f "$SRC/config.yaml" "$WORK/config.yaml"
-
-    echo "$VERSION" > "$STAMP"
 }
 
 [ -x "$PYTHON" ] || die "Bundled Python is missing from this AppImage."
-[ "$(cat "$STAMP" 2>/dev/null || true)" = "$VERSION" ] || sync_tree
+# Code only needs copying when the bundled version changes...
+[ "$(cat "$STAMP" 2>/dev/null || true)" = "$VERSION" ] || sync_code
+# ...but asset links must be refreshed every single run, because last run's
+# mount point no longer exists.
+link_assets
 
 # --- make one theme writable, on demand -----------------------------------
 materialize_theme() {

@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-09-08
+
+### Fixed
+- **The AppImage only worked on its first launch.** An AppImage mounts at a
+  fresh `/tmp/.mount_XXXXXX` every run and is unmounted on exit, so the asset
+  symlinks written into the working tree pointed at a path that no longer
+  existed the next time. Because the version stamp still matched, they were
+  never rebuilt, and the app failed with "Theme not found or contains errors!".
+  Asset links are now re-pointed on every launch; code is still only copied
+  when the bundled version changes.
+
 ## [1.2.0] - 2026-09-07
 
 ### Changed
