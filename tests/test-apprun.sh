@@ -48,6 +48,7 @@ make_image() {
     cat > "$dir/usr/bin/python3" <<'STUB'
 #!/bin/sh
 echo "PYTHON_CALLED: $*" >> "${STUB_LOG:-/dev/null}"
+echo "PYTHONPATH_WAS: ${PYTHONPATH:-EMPTY}" >> "${STUB_LOG:-/dev/null}"
 exit 0
 STUB
     chmod +x "$dir/usr/bin/python3"
@@ -280,6 +281,21 @@ check "the busy message for settings names it" \
       'grep -q "settings window is already open" "$APPRUN"'
 check "the busy message for the theme editor names it" \
       'grep -q "theme editor is already open" "$APPRUN"'
+
+# ------------------- every entry point must pass the bundled deps
+# A bare exec that forgot PYTHONPATH made the display die with
+# "Import error: No module named 'babel'" right after loading the theme.
+for mode in --config --display; do
+    : > "$TMP/calls.log"
+    run_app "$TMP/mnt-b" "$mode" >/dev/null 2>&1
+    check "$mode passes PYTHONPATH to the bundled interpreter" \
+          'grep -q "PYTHONPATH_WAS:.*opt/deps" "$TMP/calls.log"' \
+          "without it none of the bundled dependencies import"
+done
+: > "$TMP/calls.log"
+run_app_nozenity "$TMP/mnt-b" --theme-editor >/dev/null 2>&1
+check "--theme-editor passes PYTHONPATH too" \
+      'grep -q "PYTHONPATH_WAS:.*opt/deps" "$TMP/calls.log"'
 
 # ------------------------------------------- checkbox helper
 check "the autostart helper is generated" '[ -x "$WORK/.autostart-helper" ]'

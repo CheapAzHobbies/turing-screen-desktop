@@ -341,12 +341,11 @@ case "${1:-}" in
     --display|--run)
         shift
         stop_display
-        cd "$WORK"
         if command -v flock >/dev/null 2>&1; then
             exec 9>"$WORK/.display.lock" || true
             flock -w 5 9 || { echo "Another display is still holding the lock." >&2; exit 1; }
         fi
-        exec "$PYTHON" main.py ;;
+        run main.py ;;
     --stop)
         stop_display; echo "display stopped" ;;
     --autostart)
@@ -381,6 +380,5 @@ HELP
         ;;
     *)
         stop_display
-        cd "$WORK"
-        exec "$PYTHON" main.py "$@" ;;
+        run main.py "$@" ;;
 esac
