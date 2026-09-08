@@ -3,6 +3,26 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-09-08
+
+### Added
+- **"Reset screen on startup" checkbox.** Upstream sends a hardware RESET at
+  startup, which reboots the panel: it flashes, shows its firmware screen, then
+  waits five seconds before drawing. Upstream's own config note says rev. A
+  displays are better off without it, but the option was not exposed anywhere.
+  Measured on a rev. A panel: 7 seconds and a flash with it, 1 second and no
+  flash without.
+- **Close button** in the settings window.
+- `tests/test-patcher.sh`, run by CI: applies the configure.py patch to the
+  pinned upstream release and asserts every control landed and the result is
+  valid Python, so an upstream change fails the build instead of shipping a
+  window with missing buttons.
+
+### Changed
+- **"Save and run" is now "Apply to screen" and no longer closes the window.**
+  Adjusting a value meant reopening the app every time; now you can keep
+  tweaking and applying.
+
 ## [1.4.0] - 2026-09-08
 
 Verified end to end on real hardware before release: fresh install, display
