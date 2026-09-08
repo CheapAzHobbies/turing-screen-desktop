@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add a "Start at login" checkbox to upstream's configuration window.
+"""Add a "Run at startup" checkbox to upstream's configuration window.
 
 Upstream has no autostart option, and a command-line flag is not something a
 normal user will find. This inserts a checkbox in the bottom-left of the main
@@ -14,7 +14,7 @@ from pathlib import Path
 
 HELPERS = '''
 
-# --- turing-screen-desktop: "start at login" support ------------------------
+# --- turing-screen-desktop: "run at startup" support ------------------------
 # TURING_AUTOSTART_HELPER is exported by the AppImage's AppRun. Outside the
 # AppImage it is unset and the checkbox is simply not shown.
 def _ts_autostart_helper():
@@ -44,11 +44,11 @@ def _ts_autostart_set(enabled):
 '''
 
 WIDGET = '''
-        # --- turing-screen-desktop: start at login -------------------------
+        # --- turing-screen-desktop: run at startup -------------------------
         if _ts_autostart_helper():
             self.ts_autostart_var = IntVar(value=1 if _ts_autostart_enabled() else 0)
             self.ts_autostart_cb = ttk.Checkbutton(
-                self.window, text="Start at login",
+                self.window, text="Run at startup",
                 variable=self.ts_autostart_var,
                 command=lambda: _ts_autostart_set(self.ts_autostart_var.get()))
             self.ts_autostart_cb.place(x=18, y=584)
@@ -78,7 +78,7 @@ def patch(path: Path) -> None:
     src = src.replace(anchor, anchor + WIDGET, 1)
 
     path.write_text(src, encoding="utf-8")
-    print(f"patched {path}: added 'Start at login' checkbox")
+    print(f"patched {path}: added 'Run at startup' checkbox")
 
 
 if __name__ == "__main__":

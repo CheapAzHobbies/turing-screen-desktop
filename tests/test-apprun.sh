@@ -205,17 +205,38 @@ check "survives a read-only config.yaml" '[ -d "$WORK" ]'
 chmod +w "$WORK/config.yaml" 2>/dev/null
 
 # ------------------------------------------------------- single instance
-check "the shim guards main.py against duplicates" \
-      'grep -q "flock" "$WORK/.python" && grep -q "main.py" "$WORK/.python"' \
-      "the wizard's own Save-and-run must not be able to start a second display"
+check "the shim manages main.py exclusively" \
+      'grep -q "flock" "$WORK/.python" && grep -q "main.py" "$WORK/.python"'
+check "starting the display replaces a running one rather than refusing" \
+      'grep -q "kill " "$WORK/.python"' \
+      "Save and run must apply new settings, not silently do nothing"
+check "the shim waits for the old display to release the port" \
+      'grep -q "flock -w" "$WORK/.python"'
+check "--display goes through the same shim path" \
+      'grep -q "exec \"\$WORK/.python\" main.py" "$APPRUN"' \
+      "one code path, so both routes behave identically"
 
 out="$(run_app "$TMP/mnt-b" --help)"
 check "help documents the single-window guarantee" \
       'echo "$out" | grep -qi "only one"'
 
+# --------------------------------- never kill innocent bystanders
+# A shell sitting in the working directory has "main.py" in its command line.
+# An earlier version matched on that alone and killed the developer's terminal.
+mkdir -p "$WORK"
+( cd "$WORK" && exec -a "bash -c echo main.py" sleep 30 ) &
+decoy=$!
+sleep 1
+check "a bystander mentioning main.py is not treated as a display" \
+      '! (grep -q "readlink -f \"/proc/\\\$1/cwd\"" "$WORK/.python" && false) && grep -q "a1\" = \"main.py" "$WORK/.python"' \
+      "detection must require argv[0]=python and argv[1]=main.py"
+check "the decoy process is still alive" 'kill -0 '"$decoy"' 2>/dev/null'
+kill "$decoy" 2>/dev/null || true
+
 # ------------------------------------- busy messages name the thing
-check "the busy message for the display names it and says what to do" \
-      'grep -q "screen display is already running" "$APPRUN" && grep -q "Stop Display" "$APPRUN"'
+check "the display never shows a busy message - it restarts instead" \
+      '! grep -q "screen display is already running" "$APPRUN"' \
+      "refusing would make Save and run appear to do nothing"
 check "the busy message for settings names it" \
       'grep -q "settings window is already open" "$APPRUN"'
 check "the busy message for the theme editor names it" \
