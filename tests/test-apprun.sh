@@ -213,6 +213,14 @@ out="$(run_app "$TMP/mnt-b" --help)"
 check "help documents the single-window guarantee" \
       'echo "$out" | grep -qi "only one"'
 
+# ------------------------------------- busy messages name the thing
+check "the busy message for the display names it and says what to do" \
+      'grep -q "screen display is already running" "$APPRUN" && grep -q "Stop Display" "$APPRUN"'
+check "the busy message for settings names it" \
+      'grep -q "settings window is already open" "$APPRUN"'
+check "the busy message for the theme editor names it" \
+      'grep -q "theme editor is already open" "$APPRUN"'
+
 # ------------------------------------------- checkbox helper
 check "the autostart helper is generated" '[ -x "$WORK/.autostart-helper" ]'
 out="$("$WORK/.autostart-helper" status)"

@@ -81,7 +81,7 @@ case "\${1:-}" in
         if command -v flock >/dev/null 2>&1; then
             exec 9>"$WORK/.display.lock" || true
             if ! flock -n 9; then
-                echo "The Turing display is already running." >&2
+                echo "The Turing screen display is already running - not starting a second one." >&2
                 exit 0
             fi
         fi
@@ -190,12 +190,12 @@ stop_display() {
 
 # Only one window of a given kind. The lock fd survives into the exec'd process
 # and is released by the kernel even if that process is killed.
-run_once() { # run_once <lockname> <label> <script> [args...]
-    local lock="$WORK/.$1.lock" label="$2"; shift 2
+run_once() { # run_once <lockname> <busy-message> <script> [args...]
+    local lock="$WORK/.$1.lock" busy="$2"; shift 2
     if command -v flock >/dev/null 2>&1; then
         exec 8>"$lock" || true
         if ! flock -n 8; then
-            note "Already open" "$label is already open."
+            note "Turing Smart Screen" "$busy"
             exit 0
         fi
     fi
@@ -238,7 +238,7 @@ edit_theme() {
     if [ -z "$theme" ]; then theme="$(pick_theme)"; fi
     if [ -z "$theme" ]; then exit 0; fi
     materialize_theme "$theme"
-    run_once themeeditor "The theme editor" theme-editor.py "$theme"
+    run_once themeeditor "The theme editor is already open.\n\nCheck your other windows or workspaces." theme-editor.py "$theme"
 }
 
 # --- autostart -------------------------------------------------------------
@@ -298,7 +298,7 @@ case "${1:-}" in
         if command -v flock >/dev/null 2>&1; then
             exec 8>"$WORK/.configure.lock" || true
             if ! flock -n 8; then
-                note "Already open" "The configuration window is already open."
+                note "Turing Smart Screen" "The settings window is already open.\n\nCheck your other windows or workspaces."
                 exit 0
             fi
         fi
@@ -316,7 +316,7 @@ case "${1:-}" in
     --theme-editor)
         shift; edit_theme "${1:-}" ;;
     --display|--run)
-        shift; run_once display "The display" main.py ;;
+        shift; run_once display "The screen display is already running.\n\nTo restart it, first choose Stop Display from the right-click menu on this app, or Exit from the tray icon." main.py ;;
     --stop)
         stop_display; echo "display stopped" ;;
     --autostart)
@@ -350,5 +350,5 @@ time. Settings live in $WORK and survive replacing the AppImage.
 HELP
         ;;
     *)
-        run_once display "The display" main.py "$@" ;;
+        run_once display "The screen display is already running.\n\nTo restart it, first choose Stop Display from the right-click menu on this app, or Exit from the tray icon." main.py "$@" ;;
 esac
