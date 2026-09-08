@@ -1,8 +1,8 @@
 name: AppImage
 
+# Manual test builds only. Releases are built and published by release.yml,
+# so that one workflow owns the release page and its notes.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       upstream_ref:
@@ -10,7 +10,7 @@ on:
         default: '3.10.0'
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   UPSTREAM_REF: '3.10.0'
@@ -147,10 +147,3 @@ jobs:
             Turing_Smart_Screen-x86_64.AppImage
             SHA256SUMS.txt
 
-      - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            Turing_Smart_Screen-x86_64.AppImage
-            SHA256SUMS.txt

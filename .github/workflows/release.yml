@@ -7,33 +7,195 @@ on:
 permissions:
   contents: write
 
+env:
+  UPSTREAM_REF: '3.10.0'
+  PY_SERIES: '3.12'
+  PY_TAG: '312'
+  IMG: 'Turing_Smart_Screen-x86_64.AppImage'
+
 jobs:
-  release:
+  tarball:
+    name: Build installer tarball
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build tarball
+      - name: Build
         run: |
-          version="${GITHUB_REF_NAME#v}"
           stage="dist/turing-screen-desktop"
           mkdir -p "$stage"
           cp -r install.sh uninstall.sh share README.md LICENSE CHANGELOG.md "$stage/"
           chmod +x "$stage/install.sh" "$stage/uninstall.sh"
           tar -czf dist/turing-screen-desktop.tar.gz -C dist turing-screen-desktop
           (cd dist && sha256sum turing-screen-desktop.tar.gz > turing-screen-desktop.tar.gz.sha256)
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+          ls -lh dist/
+      - uses: actions/upload-artifact@v4
         with:
-          name: v${{ env.VERSION }}
-          generate_release_notes: true
-          files: |
+          name: tarball
+          path: |
             dist/turing-screen-desktop.tar.gz
             dist/turing-screen-desktop.tar.gz.sha256
+
+  appimage:
+    name: Build AppImage (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          # libfuse2: appimagetool is itself an AppImage, and the smoke test runs
+          # the image we build. Neither works without FUSE 2 on the runner.
+          sudo apt-get install -y --no-install-recommends file desktop-file-utils zsync libfuse2
+
+      - name: Fetch appimagetool
+        run: |
+          curl -fsSL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+
+      - name: Fetch a relocatable CPython (includes tkinter)
+        run: |
+          # Resolve the current patch release rather than pinning one that rots.
+          url=$(curl -fsSL "https://api.github.com/repos/niess/python-appimage/releases/tags/python${PY_SERIES}" \
+                | grep -o "https://[^\"]*cp${PY_TAG}-cp${PY_TAG}-manylinux2014_x86_64\.AppImage" \
+                | head -1)
+          [ -n "$url" ] || { echo "Could not resolve a python${PY_SERIES} AppImage"; exit 1; }
+          echo "Using $url"
+          curl -fsSL -o python.AppImage "$url"
+          chmod +x python.AppImage
+          ./python.AppImage --appimage-extract >/dev/null
+          mv squashfs-root AppDir
+          rm -f python.AppImage   # never let a later glob match the base image
+          rm -f AppDir/*.desktop AppDir/*.png AppDir/AppRun AppDir/.DirIcon
+          rm -rf AppDir/usr/share/applications AppDir/usr/share/metainfo
+
+      - name: Verify tkinter is present in the bundled Python
+        run: AppDir/usr/bin/python3 -c 'import tkinter, sys; print("tkinter", tkinter.TkVersion, "on", sys.version.split()[0])'
+
+      - name: Clone upstream
+        run: |
+          git clone --depth 1 --branch "$UPSTREAM_REF" \
+            https://github.com/mathoudebine/turing-smart-screen-python.git upstream
+          rm -rf upstream/.git upstream/tests \
+                 upstream/external/LibreHardwareMonitor upstream/external/PawnIO \
+                 upstream/tools/windows-installer
+          du -sh upstream
+
+      - name: Install Python dependencies into the image
+        run: |
+          grep -viE 'pywinstyles|pythonnet|pywin32|pyadl' upstream/requirements.txt > reqs.txt
+          AppDir/usr/bin/python3 -m pip install --no-cache-dir --upgrade pip
+          AppDir/usr/bin/python3 -m pip install --no-cache-dir --target AppDir/opt/deps -r reqs.txt
+          rm -rf AppDir/opt/deps/PyInstaller AppDir/opt/deps/pyinstaller* AppDir/opt/deps/bin
+
+      - name: Assemble the AppDir
+        run: |
+          mkdir -p AppDir/opt/turing
+          cp -r upstream/. AppDir/opt/turing/
+          echo "${UPSTREAM_REF}" > AppDir/opt/VERSION
+          install -m 755 share/AppRun AppDir/AppRun
+          cat > AppDir/turing-smart-screen.desktop <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Turing Smart Screen
+          GenericName=Smart Screen Display
+          Comment=Show system stats on a Turing / XuanFang USB smart screen
+          Exec=AppRun
+          Icon=turing-smart-screen
+          Terminal=false
+          Categories=Utility;
+          Keywords=turing;smart;screen;display;lcd;monitor;usb;stats;hardware;
+          Actions=Configure;ThemeEditor;
+
+          [Desktop Action Configure]
+          Name=Configuration Wizard
+          Exec=AppRun --config
+
+          [Desktop Action ThemeEditor]
+          Name=Theme Editor
+          Exec=AppRun --theme-editor
+          DESKTOP
+          cp AppDir/opt/turing/res/icons/monitor-icon-17865/128.png AppDir/turing-smart-screen.png
+          cp AppDir/turing-smart-screen.png AppDir/.DirIcon
+          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/128x128/apps
+          cp AppDir/turing-smart-screen.desktop AppDir/usr/share/applications/
+          cp AppDir/turing-smart-screen.png AppDir/usr/share/icons/hicolor/128x128/apps/
+          desktop-file-validate AppDir/turing-smart-screen.desktop
+
+      - name: Build
+        run: |
+          export ARCH=x86_64
+          appimagetool --no-appstream AppDir "$IMG"
+          ls -lh "$IMG"
+
+      - name: Smoke-test
+        run: |
+          chmod +x "./$IMG"
+          "./$IMG" --help
+          "./$IMG" --where
+          test -f "$HOME/.local/share/turing-screen/app/config.yaml"
+          test -w "$HOME/.local/share/turing-screen/app/config.yaml"
+          test -L "$HOME/.local/share/turing-screen/app/res/fonts"
+          echo "smoke test passed"
+          du -sh "$HOME/.local/share/turing-screen/app"
+
+      - name: Checksum
+        run: sha256sum "$IMG" > "$IMG.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: |
+            Turing_Smart_Screen-x86_64.AppImage
+            Turing_Smart_Screen-x86_64.AppImage.sha256
+
+  publish:
+    name: Publish release
+    needs: [tarball, appimage]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: tarball, path: out }
+      - uses: actions/download-artifact@v4
+        with: { name: appimage, path: out }
+
+      - name: List what will be published
+        run: ls -lh out/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: out/*
           body: |
-            ## Install
+            ## Which download do I want?
+
+            **Most people want the AppImage.** It is one self-contained file — no
+            Python, no setup, nothing to clone.
+
+            ### Option 1 — AppImage (recommended)
+
+            Download **`Turing_Smart_Screen-x86_64.AppImage`** below, then either
+            right-click it → Properties → *Allow executing as program* and
+            double-click, or:
+
+            ```bash
+            chmod +x Turing_Smart_Screen-x86_64.AppImage
+            ./Turing_Smart_Screen-x86_64.AppImage
+            ```
+
+            The first run opens the configuration wizard. After that it starts the
+            display. Other modes: `--config`, `--theme-editor`, `--display`, `--where`.
+
+            It is ~880 MB because upstream ships about 850 MB of theme artwork and
+            190 MB of fonts, all bundled so it works offline. Your settings live in
+            `~/.local/share/turing-screen/app` and survive replacing the AppImage.
+
+            ### Option 2 — Installer script
+
+            Smaller download. Sets up Python for you and adds three entries to your
+            applications menu. Needs Python 3.9–3.14.
 
             ```bash
             curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/turing-screen-desktop.tar.gz | tar xz
@@ -41,6 +203,22 @@ jobs:
             ./install.sh
             ```
 
-            The installer finds or clones `turing-smart-screen-python`, builds the
-            virtualenv, checks serial permissions, and adds three launchers to your
-            applications menu. See the README for options and troubleshooting.
+            Works on Debian/Ubuntu, Fedora, Arch, openSUSE and Alpine — it detects
+            your package manager and offers to install what is missing.
+
+            ---
+
+            ### What each file below is
+
+            | File | What it is |
+            |---|---|
+            | `Turing_Smart_Screen-x86_64.AppImage` | **The app.** Option 1 above. |
+            | `turing-screen-desktop.tar.gz` | The installer scripts. Option 2 above. |
+            | `*.sha256` | Checksums, to verify a download. Optional. |
+            | Source code (zip / tar.gz) | Added automatically by GitHub. Not needed. |
+
+            Verify a download if you want to:
+
+            ```bash
+            sha256sum -c Turing_Smart_Screen-x86_64.AppImage.sha256
+            ```
