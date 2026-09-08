@@ -3,6 +3,40 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-09-08
+
+Verified end to end on real hardware before release: fresh install, display
+starts, theme change applied by Save and run, simulated login autostart, and a
+second launch that does not duplicate.
+
+### Added
+- "Run at startup" checkbox in the settings window, patched into upstream at
+  build time. Upstream has no autostart option of its own.
+- Autostart is enabled by default on a fresh install, with no prompt. Applied
+  exactly once, so unticking the checkbox sticks.
+- Clicking the app opens the settings window and nothing else. Save and run
+  starts the display; Edit theme opens the editor.
+- `tests/test-apprun.sh`: 67 headless regression tests, run by CI.
+
+### Fixed
+- The display died instantly, logging only "Loading theme". The launch path had
+  been rewritten to a bare exec that dropped PYTHONPATH, so the first
+  third-party import failed and upstream exited 0 silently.
+- Save and run did nothing when a display was already running. configure.py
+  passes an absolute path to main.py, which the process scan did not recognise.
+  Starting the display now replaces a running one.
+- The launcher killed itself: the interpreter shim is named ".python" and
+  detection matched "python" as a substring, so the shim was mistaken for the
+  display it was starting. Matching is now on the basename.
+- A shell sitting in the working directory could be killed, because detection
+  matched any command line containing "main.py".
+- The display was started with the interpreter from a mount that unmounts as
+  soon as configure.py exits. Long-lived windows now relaunch the AppImage so
+  each owns a live mount.
+- Autostart hung at login: AppImageLauncher intercepts un-integrated images with
+  an "Integrate and run" dialog that nobody is there to click. The login
+  launcher now bypasses it.
+
 ## [1.3.0] - 2026-09-08
 
 ### Added
