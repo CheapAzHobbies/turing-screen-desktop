@@ -3,6 +3,26 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-09-08
+
+### Added
+- "Run at startup" checkbox in the configuration window itself, patched into
+  upstream at build time. Upstream has no autostart option, and a flag or a
+  right-click action is not something a normal user will find.
+- Clicking the app opens the settings window and nothing else. That window is
+  upstream's own hub: Save and run starts the display, Edit theme opens the
+  editor.
+- `tests/test-apprun.sh`: 57 headless regression tests, run by CI.
+
+### Fixed
+- Upstream ships `#!/usr/bin/env python` and the wizard launches its scripts
+  through that shebang. Plain `python` does not exist on most distros, so
+  "Save and run" and "Edit theme" were both dead inside the AppImage.
+- "Save and run" appeared to do nothing when a display was already running.
+  Starting the display now replaces a running one rather than refusing.
+- The process scan matched any command line containing "main.py", so a shell
+  sitting in the working directory could be killed. Detection is now exact.
+
 ## [1.2.1] - 2026-09-08
 
 ### Fixed
