@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-09-07
+
+### Changed
+- The release page now explains itself: notes lead with the AppImage, give
+  copy-paste instructions for both install routes, and include a table saying
+  what every asset is.
+- One workflow builds and publishes everything. Previously two workflows wrote
+  to the same release, so the notes described only the tarball and never
+  mentioned the AppImage.
+- Checksums are named after the file they cover
+  (`Turing_Smart_Screen-x86_64.AppImage.sha256`) instead of a generic
+  `SHA256SUMS.txt` sitting beside a similarly named tarball checksum.
+
 ## [1.1.3] - 2026-09-07
 
 ### Fixed
