@@ -18,10 +18,13 @@ jobs:
           sudo apt-get install -y shellcheck desktop-file-utils
 
       - name: Shellcheck
-        run: shellcheck install.sh uninstall.sh share/AppRun tests/test-apprun.sh share/turing-config.in share/turing-theme-editor.in share/turing-display.in
+        run: shellcheck install.sh uninstall.sh share/AppRun tests/test-apprun.sh tests/test-patcher.sh share/turing-config.in share/turing-theme-editor.in share/turing-display.in
 
       - name: AppRun regression tests
         run: ./tests/test-apprun.sh
+
+      - name: configure.py patch still applies to upstream
+        run: ./tests/test-patcher.sh
 
       - name: Validate desktop entries
         run: |

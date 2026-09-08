@@ -32,6 +32,30 @@ def _ts_autostart_enabled():
         return False
 
 
+def _ts_reset_on_startup():
+    try:
+        import ruamel.yaml
+        with open(MAIN_DIRECTORY / "config.yaml", "rt", encoding="utf-8") as f:
+            data = ruamel.yaml.YAML().load(f)
+        return bool(data["display"].get("RESET_ON_STARTUP", True))
+    except Exception:
+        return True
+
+
+def _ts_set_reset_on_startup(enabled):
+    try:
+        import ruamel.yaml
+        yaml = ruamel.yaml.YAML()
+        path = MAIN_DIRECTORY / "config.yaml"
+        with open(path, "rt", encoding="utf-8") as f:
+            data = yaml.load(f)
+        data["display"]["RESET_ON_STARTUP"] = bool(enabled)
+        with open(path, "wt", encoding="utf-8") as f:
+            yaml.dump(data, f)
+    except Exception:
+        pass
+
+
 def _ts_autostart_set(enabled):
     helper = _ts_autostart_helper()
     if not helper:
@@ -52,6 +76,21 @@ WIDGET = '''
                 variable=self.ts_autostart_var,
                 command=lambda: _ts_autostart_set(self.ts_autostart_var.get()))
             self.ts_autostart_cb.place(x=18, y=584)
+
+            # Upstream sends a hardware RESET at startup, which reboots the panel:
+            # it flashes, shows its firmware screen, then waits 5s before drawing.
+            # Upstream's own config note says rev. A displays are better off
+            # without it, but it is not exposed anywhere in the UI.
+            self.ts_reset_var = IntVar(value=1 if _ts_reset_on_startup() else 0)
+            self.ts_reset_cb = ttk.Checkbutton(
+                self.window, text="Reset screen on startup (slower, avoids glitches)",
+                variable=self.ts_reset_var,
+                command=lambda: _ts_set_reset_on_startup(self.ts_reset_var.get()))
+            self.ts_reset_cb.place(x=170, y=584)
+
+            self.ts_close_btn = ttk.Button(self.window, text="Close",
+                                           command=lambda: self.window.destroy())
+            self.ts_close_btn.place(x=700, y=578, height=32, width=90)
         # -------------------------------------------------------------------
 '''
 
@@ -77,8 +116,30 @@ def patch(path: Path) -> None:
         sys.exit(f"patch failed: button-row anchor not found exactly once in {path}")
     src = src.replace(anchor, anchor + WIDGET, 1)
 
+    # 4. "Save and run" closed the settings window, so changing a value meant
+    #    reopening the app every time. Keep it open; there is a Close button now.
+    anchor = """        if platform.system() == "Windows":
+            subprocess.Popen([str(main_file)], shell=True)
+        else:
+            subprocess.Popen([str(main_file)])
+
+        self.window.destroy()"""
+    if src.count(anchor) != 1:
+        sys.exit(f"patch failed: save-and-run anchor not found exactly once in {path}")
+    src = src.replace(anchor, """        if platform.system() == "Windows":
+            subprocess.Popen([str(main_file)], shell=True)
+        else:
+            subprocess.Popen([str(main_file)])""", 1)
+
+    # 5. name the button for what it does
+    anchor = 'text="Save and run"'
+    if src.count(anchor) != 1:
+        sys.exit(f"patch failed: save-and-run label not found exactly once in {path}")
+    src = src.replace(anchor, 'text="Apply to screen"', 1)
+
     path.write_text(src, encoding="utf-8")
-    print(f"patched {path}: added 'Run at startup' checkbox")
+    print(f"patched {path}: Run at startup, reset option, Close button, "
+          f"Apply to screen keeps the window open")
 
 
 if __name__ == "__main__":
