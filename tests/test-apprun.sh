@@ -205,33 +205,56 @@ check "survives a read-only config.yaml" '[ -d "$WORK" ]'
 chmod +w "$WORK/config.yaml" 2>/dev/null
 
 # ------------------------------------------------------- single instance
-check "the shim manages main.py exclusively" \
-      'grep -q "flock" "$WORK/.python" && grep -q "main.py" "$WORK/.python"'
-check "starting the display replaces a running one rather than refusing" \
-      'grep -q "kill " "$WORK/.python"' \
+check "only one display can run at a time" \
+      'grep -q "flock -w 5" "$APPRUN" && grep -q "display.lock" "$APPRUN"'
+check "--display stops any running display first" \
+      'grep -q "stop_display" "$APPRUN"' \
       "Save and run must apply new settings, not silently do nothing"
-check "the shim waits for the old display to release the port" \
-      'grep -q "flock -w" "$WORK/.python"'
-check "--display goes through the same shim path" \
-      'grep -q "exec \"\$WORK/.python\" main.py" "$APPRUN"' \
-      "one code path, so both routes behave identically"
+check "--display waits for the port to be released" \
+      'grep -q "flock -w 5" "$APPRUN"'
+check "the shim relaunches the AppImage for the display" \
+      'grep -q -- "--display" "$WORK/.python"' \
+      "otherwise the mount vanishes when configure.py exits, killing the display"
+check "the shim relaunches the AppImage for the theme editor" \
+      'grep -q -- "--theme-editor" "$WORK/.python"'
+check "the shim can find the image if it was renamed" \
+      'grep -q "Turing_Smart_Screen\*.AppImage" "$WORK/.python"'
+check "the shim still runs other scripts in the current mount" \
+      'grep -q "exec \"" "$WORK/.python"'
 
 out="$(run_app "$TMP/mnt-b" --help)"
 check "help documents the single-window guarantee" \
       'echo "$out" | grep -qi "only one"'
 
-# --------------------------------- never kill innocent bystanders
-# A shell sitting in the working directory has "main.py" in its command line.
-# An earlier version matched on that alone and killed the developer's terminal.
-mkdir -p "$WORK"
-( cd "$WORK" && exec -a "bash -c echo main.py" sleep 30 ) &
-decoy=$!
+# ------------------------ the wizard launches main.py by ABSOLUTE path
+# configure.py does Popen([str(main_file)]) with a full path, so detection that
+# insists on the bare string "main.py" never sees the running display. That made
+# "Save and run" silently do nothing.
+check "detection accepts an absolute path to main.py" \
+      'grep -q "main.py|\*/main.py" "$APPRUN"' \
+      "the wizard passes /full/path/main.py, not main.py"
+
+# Prove it end to end: a stand-in started the way configure.py starts main.py
+# (cwd = working dir, argv[0] a python, argv[1] an ABSOLUTE path) must be
+# stopped when a new display starts, while a bystander must survive.
+cp "$WORK/main.py" "$TMP/main.py.stub"
+printf 'import time\ntime.sleep(30)\n' > "$WORK/main.py"
+( cd "$WORK" && exec python3 "$WORK/main.py" ) &
+wizard_style=$!
+( cd "$WORK" && exec -a "bash -c edit main.py" sleep 30 ) &
+bystander=$!
 sleep 1
-check "a bystander mentioning main.py is not treated as a display" \
-      '! (grep -q "readlink -f \"/proc/\\\$1/cwd\"" "$WORK/.python" && false) && grep -q "a1\" = \"main.py" "$WORK/.python"' \
-      "detection must require argv[0]=python and argv[1]=main.py"
-check "the decoy process is still alive" 'kill -0 '"$decoy"' 2>/dev/null'
-kill "$decoy" 2>/dev/null || true
+cp "$TMP/main.py.stub" "$WORK/main.py"
+run_app "$TMP/mnt-b" --display >/dev/null 2>&1 || true
+sleep 1
+check "a display started by absolute path IS stopped by a new start" \
+      '! kill -0 '"$wizard_style"' 2>/dev/null' \
+      "this is the exact case Save and run hits"
+check "a bystander mentioning main.py is NOT stopped" \
+      'kill -0 '"$bystander"' 2>/dev/null' \
+      "matching command lines loosely once killed a real terminal"
+kill "$wizard_style" "$bystander" 2>/dev/null || true
+
 
 # ------------------------------------- busy messages name the thing
 check "the display never shows a busy message - it restarts instead" \
@@ -245,7 +268,7 @@ check "the busy message for the theme editor names it" \
 # ------------------------------------------- checkbox helper
 check "the autostart helper is generated" '[ -x "$WORK/.autostart-helper" ]'
 out="$("$WORK/.autostart-helper" status)"
-check "helper reports disabled initially" 'echo "$out" | grep -q disabled'
+check "helper reports enabled, since autostart is the default" 'echo "$out" | grep -q enabled'
 HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/config" "$WORK/.autostart-helper" on >/dev/null
 check "helper can enable autostart" \
       '[ -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
@@ -255,15 +278,21 @@ HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/config" "$WORK/.autostart-helper" off >/d
 check "helper can disable autostart" \
       '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
 
-# ------------------------------------------- first-run autostart prompt
-# zenity is stubbed to fail (= user says no), so nothing should be enabled,
-# but the question must be marked as asked so it never repeats.
-rm -rf "$TMP/data" "$TMP/config" "$TMP/home"; mkdir -p "$TMP/home"
-run_app "$TMP/mnt-b" >/dev/null 2>&1
-check "declining the autostart prompt enables nothing" \
-      '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
-check "the autostart question is only ever asked once" \
-      '[ -f "$WORK/.autostart-asked" ]'
+# --------------------------------------- autostart is on out of the box
+rm -rf "${TMP:?}/data" "${TMP:?}/config" "${TMP:?}/home"; mkdir -p "$TMP/home"
+run_app "$TMP/mnt-b" --where >/dev/null 2>&1
+check "autostart is enabled on a fresh install, with no prompt" \
+      '[ -f "$TMP/config/autostart/turing-smart-screen.desktop" ]' \
+      "anyone installing this wants the screen running at startup"
+check "no question dialog is used for it" \
+      '! grep -q "zenity --question" "$APPRUN"'
+
+# Unticking the checkbox must stick: the default is applied once only.
+HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/config" "$WORK/.autostart-helper" off >/dev/null
+run_app "$TMP/mnt-b" --where >/dev/null 2>&1
+check "turning it off is not silently undone on the next launch" \
+      '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]' \
+      "the default must be applied exactly once, ever"
 
 # ------------------------------------------------------------- autostart
 out="$(run_app "$TMP/mnt-b" --autostart)"
