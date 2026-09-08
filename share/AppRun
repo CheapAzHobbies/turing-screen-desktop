@@ -114,6 +114,9 @@ link_assets
 
 run() { cd "$WORK"; PYTHONPATH="$DEPS${PYTHONPATH:+:$PYTHONPATH}" exec "$PYTHON" "$@"; }
 
+# Same, but returns instead of replacing this process, so we can follow up.
+run_wait() { ( cd "$WORK"; PYTHONPATH="$DEPS${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" "$@" ); }
+
 display_pids() {
     local p
     for p in $(pgrep -f "main\.py" 2>/dev/null); do
@@ -255,7 +258,24 @@ autostart_status() {
 case "${1:-}" in
     ""|--config|--configure)
         # Clicking the app lands here: the settings window, every time.
-        run_once configure "The configuration window" configure.py ;;
+        if command -v flock >/dev/null 2>&1; then
+            exec 8>"$WORK/.configure.lock" || true
+            if ! flock -n 8; then
+                note "Already open" "The configuration window is already open."
+                exit 0
+            fi
+        fi
+        run_wait configure.py || true
+        # One question, once, at the only moment it makes sense: just after the
+        # user has finished setting the screen up. Never asked again.
+        if [ ! -f "$WORK/.autostart-asked" ] && command -v zenity >/dev/null 2>&1; then
+            touch "$WORK/.autostart-asked"
+            if zenity --question --width=400 --title="Start automatically?" \
+                --text="Start the Turing smart screen automatically every time you log in?\n\nYou can change this later from the app's right-click menu." \
+                2>/dev/null; then
+                autostart_on
+            fi
+        fi ;;
     --theme-editor)
         shift; edit_theme "${1:-}" ;;
     --display|--run)
@@ -283,6 +303,8 @@ Turing Smart Screen $VERSION (AppImage)
   --autostart on      start the display automatically at login
   --autostart off     stop doing that
   --autostart         show whether autostart is enabled
+
+You are asked once, after your first configuration, whether to start at login.
   --where             show where settings are stored
   --help              this message
 

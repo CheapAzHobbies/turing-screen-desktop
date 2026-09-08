@@ -213,6 +213,16 @@ out="$(run_app "$TMP/mnt-b" --help)"
 check "help documents the single-window guarantee" \
       'echo "$out" | grep -qi "only one"'
 
+# ------------------------------------------- first-run autostart prompt
+# zenity is stubbed to fail (= user says no), so nothing should be enabled,
+# but the question must be marked as asked so it never repeats.
+rm -rf "$TMP/data" "$TMP/config" "$TMP/home"; mkdir -p "$TMP/home"
+run_app "$TMP/mnt-b" >/dev/null 2>&1
+check "declining the autostart prompt enables nothing" \
+      '[ ! -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
+check "the autostart question is only ever asked once" \
+      '[ -f "$WORK/.autostart-asked" ]'
+
 # ------------------------------------------------------------- autostart
 out="$(run_app "$TMP/mnt-b" --autostart)"
 check "autostart is off by default" 'echo "$out" | grep -q "disabled"'

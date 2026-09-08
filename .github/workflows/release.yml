@@ -107,7 +107,7 @@ jobs:
           Terminal=false
           Categories=Utility;
           Keywords=turing;smart;screen;display;lcd;monitor;usb;stats;hardware;
-          Actions=StartDisplay;ThemeEditor;StopDisplay;
+          Actions=StartDisplay;ThemeEditor;StopDisplay;AutostartOn;AutostartOff;
 
           [Desktop Action StartDisplay]
           Name=Start Display
@@ -120,6 +120,14 @@ jobs:
           [Desktop Action StopDisplay]
           Name=Stop Display
           Exec=AppRun --stop
+
+          [Desktop Action AutostartOn]
+          Name=Start At Login
+          Exec=AppRun --autostart on
+
+          [Desktop Action AutostartOff]
+          Name=Don't Start At Login
+          Exec=AppRun --autostart off
           DESKTOP
           cp AppDir/opt/turing/res/icons/monitor-icon-17865/128.png AppDir/turing-smart-screen.png
           cp AppDir/turing-smart-screen.png AppDir/.DirIcon
