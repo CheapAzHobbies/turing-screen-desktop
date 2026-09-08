@@ -333,6 +333,9 @@ check "autostart is off by default" 'echo "$out" | grep -q "disabled"'
 run_app "$TMP/mnt-b" --autostart on >/dev/null 2>&1
 check "autostart on writes a desktop entry" \
       '[ -f "$TMP/config/autostart/turing-smart-screen.desktop" ]'
+check "the autostart launcher bypasses the AppImageLauncher dialog" \
+      'grep -q "APPIMAGELAUNCHER_DISABLE" "$TMP/home/.local/bin/turing-smart-screen"' \
+      "at login nobody can click Integrate and run"
 check "autostart on writes a resilient launcher" \
       'grep -q "Turing_Smart_Screen\*.AppImage" "$TMP/home/.local/bin/turing-smart-screen"' \
       "must still find the image after AppImageLauncher renames it on update"

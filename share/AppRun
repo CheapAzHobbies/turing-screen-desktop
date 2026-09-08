@@ -129,6 +129,10 @@ if [ ! -x "\$img" ]; then
     done
 fi
 [ -x "\$img" ] || { echo "Turing Smart Screen AppImage not found" >&2; exit 1; }
+# AppImageLauncher intercepts un-integrated images with an "Integrate and run"
+# dialog. At login there is nobody to click it, so the screen would never start.
+APPIMAGELAUNCHER_DISABLE=1
+export APPIMAGELAUNCHER_DISABLE
 exec "\$img" --display
 INNER
     sed -i "s|__IMG__|\$IMG|" "\$LAUNCHER"
@@ -191,6 +195,10 @@ if [ ! -x "\$img" ]; then
     done
 fi
 [ -x "\$img" ] || { echo "Turing Smart Screen AppImage not found" >&2; exit 1; }
+# AppImageLauncher intercepts un-integrated images with an "Integrate and run"
+# dialog. At login there is nobody to click it, so the screen would never start.
+APPIMAGELAUNCHER_DISABLE=1
+export APPIMAGELAUNCHER_DISABLE
 exec "\$img" --display
 LAUNCH
     chmod +x "$LAUNCHER"
